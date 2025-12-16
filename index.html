@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Manager DEVision - Deep Dive</title>
+    
+    <!-- Import Source Code Pro -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #e0e0e0;
+            --box-bg: #ffffff;
+            --border-width: 3px;
+            --hard-shadow: 6px 6px 0px #000000;
+            
+            /* Service Colors (High Contrast) */
+            --c-auth: #0000ff;       /* Blue */
+            --c-company: #ff00ff;    /* Magenta */
+            --c-notify: #ff5722;     /* Deep Orange */
+            --c-sub: #9c27b0;        /* Purple */
+            --c-payment: #008000;    /* Dark Green */
+            --c-job: #ff0000;        /* Red */
+            --c-match: #00ffff;      /* Cyan */
+            --c-search: #ffff00;     /* Yellow */
+            --c-error: #ff0000;      /* Error Red */
+        }
+
+        /* --- GLOBAL SCROLLBAR HIDE --- */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        * {
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+        }
+
+        body {
+            font-family: 'Source Code Pro', 'Courier New', Courier, monospace;
+            background-color: var(--bg-color);
+            color: black;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            text-transform: uppercase;
+        }
+
+        /* Adjusted Layout Width to prevent cramping */
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            border: var(--border-width) solid black;
+            background: white;
+            padding: 15px;
+            box-shadow: var(--hard-shadow);
+            width: 1350px; 
+            box-sizing: border-box;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 { margin: 0; font-size: 24px; letter-spacing: -2px; font-weight: 900; }
+        
+        .main-layout {
+            display: flex;
+            gap: 25px;
+            width: 1350px;
+        }
+
+        .left-col {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+
+        .right-col {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 0; /* Prevents flex overflow */
+        }
+
+        /* Controls & Chaos */
+        .panel {
+            background: white;
+            border: var(--border-width) solid black;
+            box-shadow: var(--hard-shadow);
+            padding: 15px;
+        }
+        
+        .panel-title {
+            font-weight: 900;
+            border-bottom: 2px solid black;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            font-size: 14px;
+            background: #000;
+            color: #fff;
+            padding: 5px;
+            letter-spacing: 1px;
+        }
+
+        .chaos-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chaos-item {
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }
+        
+        .chaos-item input { 
+            margin-right: 10px; 
+            cursor: pointer; 
+            transform: scale(1.3); 
+            accent-color: red;
+        }
+        .chaos-item:hover { color: red; }
+
+        button {
+            background-color: black;
+            color: white;
+            border: none;
+            padding: 20px 10px;
+            width: 100%;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: 'Source Code Pro', 'Courier New', Courier, monospace;
+            font-weight: 900;
+            box-shadow: var(--hard-shadow);
+            border: 2px solid white;
+            transition: transform 0.1s;
+        }
+
+        button:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0px #444; }
+        button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #444; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+
+        /* Inspector Panel */
+        #inspector {
+            height: 440px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+            background: #f8f8f8;
+        }
+        .json-block {
+            background: #eee;
+            border-left: 3px solid black;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+            font-family: 'Source Code Pro', monospace;
+            white-space: pre-wrap;
+            opacity: 0;
+            animation: fadeIn 0.3s forwards;
+            font-size: 10px;
+        }
+        .json-key { color: #880088; }
+        .json-string { color: #008800; }
+        .json-number { color: #0000ff; }
+        .inspector-label { font-size: 10px; color: #000; font-weight: 900; margin-bottom: 4px; border-bottom: 1px dashed #ccc; display:inline-block;}
+
+        /* Diagram Container */
+        .diagram-container {
+            position: relative;
+            width: 100%;
+            height: 750px;
+            background: white;
+            border: var(--border-width) solid black;
+            box-shadow: var(--hard-shadow);
+            overflow: hidden;
+        }
+
+        /* Nodes */
+        .node {
+            position: absolute;
+            width: 150px; /* Slightly wider */
+            padding: 10px;
+            background: var(--box-bg);
+            border: var(--border-width) solid black;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            z-index: 5;
+            transition: all 0.2s;
+        }
+
+        .node .label {
+            display: block;
+            margin-top: 5px;
+            font-size: 10px;
+            color: black;
+            background: #eee;
+            border-top: 2px solid black;
+            padding-top: 4px;
+            font-weight: 600;
+        }
+        
+        .node .tech-stack {
+            display: block;
+            font-size: 9px;
+            color: #555;
+            margin-top: 4px;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        /* Color Strips for Nodes */
+        .strip { height: 6px; width: 100%; border-bottom: 2px solid black; margin-bottom: 5px; }
+
+        /* Positioning */
+        /* Row 1: Entry */
+        #client { top: 30px; left: 40px; }
+        #kong { top: 30px; left: 280px; }
+        #auth { top: 30px; left: 520px; }
+
+        /* Row 2: Infrastructure */
+        #kafka-cluster {
+            position: absolute;
+            top: 150px;
+            left: 200px;
+            width: 550px;
+            height: 100px;
+            border: 4px dashed black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            z-index: 4; 
+        }
+
+        /* Row 3 Services (Grid) - Shifted right slightly due to wider container */
+        #company { top: 340px; left: 50px; }
+        #notification { top: 340px; left: 280px; }
+        #subscription { top: 340px; left: 510px; }
+        #payment { top: 340px; left: 740px; }
+
+        /* Row 4 Services (Grid) */
+        #jobpost { top: 520px; left: 160px; }
+        #matching { top: 520px; left: 390px; }
+        #search { top: 520px; left: 620px; }
+
+        /* Database Layer (Bottom) */
+        .db-node {
+            position: absolute;
+            width: 110px;
+            font-size: 10px;
+            background: #ddd;
+            border: 2px solid #333;
+            text-align: center;
+            padding: 4px;
+            z-index: 3;
+            font-weight: bold;
+        }
+        #db_company { top: 430px; left: 70px; }
+        #db_notify { top: 430px; left: 300px; }
+        #db_sub { top: 430px; left: 530px; }
+        #db_pay { top: 430px; left: 760px; }
+        
+        #db_job { top: 610px; left: 180px; }
+        #db_match { top: 610px; left: 410px; }
+        #db_search { top: 610px; left: 640px; }
+
+        /* Packet Styles */
+        .packet {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: black;
+            display: none;
+            z-index: 10;
+            border: 2px solid white;
+        }
+
+        /* SVG Lines */
+        svg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 1;
+        }
+        
+        /* Line Labels */
+        .line-label {
+            font-size: 10px;
+            font-weight: bold;
+            background: white;
+            padding: 2px 4px;
+            border: 1px solid #000;
+        }
+
+        /* Specific Service Paths */
+        .path-auth { stroke: var(--c-auth); }
+        .path-company { stroke: var(--c-company); }
+        .path-notify { stroke: var(--c-notify); }
+        .path-sub { stroke: var(--c-sub); }
+        .path-payment { stroke: var(--c-payment); }
+        .path-job { stroke: var(--c-job); }
+        .path-match { stroke: var(--c-match); }
+        .path-search { stroke: var(--c-search); }
+
+        line, path { 
+            stroke-width: 3; 
+            fill: none; 
+            stroke-linecap: square;
+            stroke-linejoin: miter;
+        }
+        .arrow-head { fill: black; }
+
+        /* Console */
+        #console {
+            width: 100%;
+            height: 180px;
+            background-color: black;
+            color: #00ff00;
+            font-family: 'Source Code Pro', 'Courier New', Courier, monospace;
+            font-size: 13px;
+            padding: 15px;
+            overflow-y: auto;
+            border: var(--border-width) solid black;
+            box-shadow: var(--hard-shadow);
+            box-sizing: border-box;
+        }
+
+        .log-entry { border-bottom: 1px dashed #333; padding: 3px 0; }
+        .log-hl { color: yellow; font-weight: bold; }
+        .log-warn { color: orange; }
+        .log-err { color: #ff3333; font-weight: 900; background: #330000; display: inline-block; padding: 0 5px;}
+
+        /* Highlights */
+        .active-node {
+            background: black !important;
+            color: white !important;
+            transform: translate(-3px, -3px);
+            box-shadow: 6px 6px 0px var(--c-auth);
+            z-index: 20;
+        }
+        .active-node .strip { border-color: white; }
+        .active-node .label { background: #333; color: white; border-color: white; }
+        .active-node .tech-stack { color: #aaa; }
+
+        /* Error Node State */
+        .error-node {
+            background: #ffcccc !important;
+            border-color: red !important;
+            box-shadow: 6px 6px 0px red !important;
+            animation: shake 0.5s;
+        }
+        .error-node .strip { background: red !important; border-color: red; }
+        
+        /* Offline Mode State */
+        .node.offline-mode {
+            background: repeating-linear-gradient(45deg, #ffffff, #ffffff 10px, #e0e0e0 10px, #e0e0e0 20px);
+            opacity: 0.8;
+            border-style: dashed;
+        }
+        .node.offline-mode::after {
+            content: "OFFLINE";
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-10deg);
+            border: 3px solid red;
+            color: red;
+            font-size: 14px;
+            font-weight: 900;
+            padding: 2px 5px;
+            background: white;
+            z-index: 30;
+        }
+
+        /* 503 Badge */
+        .error-badge {
+            position: absolute;
+            top: -10px; right: -10px;
+            background: red;
+            color: white;
+            font-size: 11px;
+            font-weight: 900;
+            padding: 3px 6px;
+            border: 2px solid black;
+            z-index: 40;
+            display: none;
+            box-shadow: 4px 4px 0px black;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        
+        @keyframes fadeIn { to { opacity: 1; } }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Job Manager DEVision // Subsystem</h1>
+        <div style="font-size: 11px; font-weight: bold;">ENV: STAGING (v2.4)</div>
+    </header>
+
+    <div class="main-layout">
+        <div class="left-col">
+            <button onclick="startSimulation()" id="startBtn">EXECUTE_EVENT_FLOW()</button>
+            
+            <div class="panel chaos-panel">
+                <div class="panel-title">CHAOS MODE // TOGGLE OFFLINE</div>
+                <div class="chaos-grid">
+                    <label class="chaos-item"><input type="checkbox" id="chk_company" onchange="toggleOffline('company')"> COMPANY_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_notify" onchange="toggleOffline('notification')"> NOTIFY_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_sub" onchange="toggleOffline('subscription')"> SUB_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_payment" onchange="toggleOffline('payment')"> PAYMENT_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_job" onchange="toggleOffline('jobpost')"> JOB_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_match" onchange="toggleOffline('matching')"> MATCH_SVC (OFFLINE)</label>
+                    <label class="chaos-item"><input type="checkbox" id="chk_search" onchange="toggleOffline('search')"> SEARCH_SVC (OFFLINE)</label>
+                </div>
+            </div>
+
+            <div class="panel" id="inspector">
+                <div class="panel-title">PAYLOAD INSPECTOR</div>
+                <div id="inspector-content" style="padding: 10px;">
+                    <div style="color:#888; text-align:center; padding-top:20px;">WAITING FOR TRAFFIC...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-col">
+            <div class="diagram-container">
+                <svg>
+                    <defs>
+                        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                          <path d="M0,0 L0,6 L9,3 z" fill="black" />
+                        </marker>
+                    </defs>
+
+                    <!-- Standard Lines with Labels -->
+                    <line x1="190" y1="65" x2="280" y2="65" stroke="black" marker-end="url(#arrow)" />
+                    <text x="215" y="60" class="line-label">HTTPS/POST</text>
+
+                    <line x1="430" y1="65" x2="520" y2="65" stroke="black" marker-end="url(#arrow)" />
+                    <text x="450" y="60" class="line-label">Kong Proxy</text>
+
+                    <line x1="585" y1="105" x2="585" y2="150" stroke="black" marker-end="url(#arrow)" />
+                    <text x="590" y="130" class="line-label">TCP:9092</text>
+
+                    <!-- ORTHOGONAL SERVICE PATHS (Start from Kafka Center: 475, 250) -->
+                    <!-- Row 1 Splits -->
+                    <path class="path-company" d="M 475 250 L 475 280 L 115 280 L 115 340" marker-end="url(#arrow)" />
+                    <path class="path-notify" d="M 475 250 L 475 280 L 345 280 L 345 340" marker-end="url(#arrow)" />
+                    <path class="path-sub" d="M 475 250 L 475 280 L 575 280 L 575 340" marker-end="url(#arrow)" />
+                    <path class="path-payment" d="M 475 250 L 475 280 L 805 280 L 805 340" marker-end="url(#arrow)" />
+
+                    <!-- Row 2 Splits -->
+                    <path class="path-job" d="M 475 250 L 475 480 L 225 480 L 225 520" marker-end="url(#arrow)" />
+                    <path class="path-match" d="M 475 250 L 475 480 L 455 480 L 455 520" marker-end="url(#arrow)" />
+                    <path class="path-search" d="M 475 250 L 475 480 L 685 480 L 685 520" marker-end="url(#arrow)" />
+
+                    <!-- DB Connections -->
+                    <line x1="115" y1="400" x2="115" y2="430" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    <line x1="345" y1="400" x2="345" y2="430" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    <line x1="575" y1="400" x2="575" y2="430" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    <line x1="805" y1="400" x2="805" y2="430" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    
+                    <line x1="225" y1="580" x2="225" y2="610" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    <line x1="455" y1="580" x2="455" y2="610" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+                    <line x1="685" y1="580" x2="685" y2="610" stroke="black" stroke-dasharray="2,2" stroke-width="1" />
+
+                </svg>
+
+                <!-- Row 1 -->
+                <div id="client" class="node">
+                    <div class="strip" style="background:black;"></div>
+                    CLIENT
+                    <span class="label">BROWSER/APP</span>
+                    <span class="tech-stack">React / Next.js</span>
+                </div>
+                <div id="kong" class="node">
+                    <div class="strip" style="background:#00d1b2;"></div>
+                    KONG GW
+                    <span class="label">API GATEWAY</span>
+                    <span class="tech-stack">Route: /api/v1/*</span>
+                </div>
+                <div id="auth" class="node">
+                    <div class="strip" style="background:var(--c-auth);"></div>
+                    AUTH SERVICE
+                    <span class="label">AUTHN + AUTHZ</span>
+                    <span class="tech-stack">Node.js / Express</span>
+                </div>
+
+                <!-- Kafka -->
+                <div id="kafka-cluster">
+                    <div style="text-align:center;">
+                        <div style="font-size: 20px; font-weight: 900; background:black; color:white; padding:5px 15px; transform: rotate(-1deg);">KAFKA EVENT BUS</div>
+                        <div style="margin-top:5px; font-size:10px;">TOPIC: GLOBAL.EVENTS | 3 PARTITIONS</div>
+                        <div style="font-size:9px; color:#555; margin-top:2px;">Coordination: Zookeeper</div>
+                    </div>
+                </div>
+
+                <!-- Row 3 Services -->
+                <div id="company" class="node">
+                    <div class="strip" style="background:var(--c-company);"></div>
+                    COMPANY SVC
+                    <span class="label">PROFILE MGR</span>
+                    <span class="tech-stack">Golang / gRPC</span>
+                    <div class="error-badge" id="badge_company">503 ERR</div>
+                </div>
+                <div id="notification" class="node">
+                    <div class="strip" style="background:var(--c-notify);"></div>
+                    NOTIFY SVC
+                    <span class="label">MAIL/SMS</span>
+                    <span class="tech-stack">Python / Celery</span>
+                    <div class="error-badge" id="badge_notification">503 ERR</div>
+                </div>
+                <div id="subscription" class="node">
+                    <div class="strip" style="background:var(--c-sub);"></div>
+                    SUB SVC
+                    <span class="label">PLANS</span>
+                    <span class="tech-stack">Node.js</span>
+                    <div class="error-badge" id="badge_subscription">503 ERR</div>
+                </div>
+                <div id="payment" class="node">
+                    <div class="strip" style="background:var(--c-payment);"></div>
+                    PAYMENT SVC
+                    <span class="label">TRANSACTIONS</span>
+                    <span class="tech-stack">Java / Spring</span>
+                    <div class="error-badge" id="badge_payment">503 ERR</div>
+                </div>
+
+                <!-- Row 4 Services -->
+                <div id="jobpost" class="node">
+                    <div class="strip" style="background:var(--c-job);"></div>
+                    JOB POST SVC
+                    <span class="label">CRUD JOBS</span>
+                    <span class="tech-stack">Node.js</span>
+                    <div class="error-badge" id="badge_jobpost">503 ERR</div>
+                </div>
+                <div id="matching" class="node">
+                    <div class="strip" style="background:var(--c-match);"></div>
+                    MATCH SVC
+                    <span class="label">AI ENGINE</span>
+                    <span class="tech-stack">Python / PyTorch</span>
+                    <div class="error-badge" id="badge_matching">503 ERR</div>
+                </div>
+                <div id="search" class="node">
+                    <div class="strip" style="background:var(--c-search);"></div>
+                    SEARCH SVC
+                    <span class="label">INDEXER</span>
+                    <span class="tech-stack">Java / Lucene</span>
+                    <div class="error-badge" id="badge_search">503 ERR</div>
+                </div>
+
+                <!-- DB Layer -->
+                <div id="db_company" class="db-node">PGSQL: profiles_db</div>
+                <div id="db_notify" class="db-node">Redis: queues</div>
+                <div id="db_sub" class="db-node">PGSQL: subs_db</div>
+                <div id="db_pay" class="db-node">PGSQL: ledger</div>
+                
+                <div id="db_job" class="db-node">MongoDB: jobs</div>
+                <div id="db_match" class="db-node">Pinecone (Vector)</div>
+                <div id="db_search" class="db-node">Elasticsearch</div>
+
+                <!-- Packets -->
+                <div id="p_main" class="packet"></div>
+                <div id="p_1" class="packet" style="background:var(--c-company);"></div>
+                <div id="p_2" class="packet" style="background:var(--c-notify);"></div>
+                <div id="p_3" class="packet" style="background:var(--c-sub);"></div>
+                <div id="p_4" class="packet" style="background:var(--c-payment);"></div>
+                <div id="p_5" class="packet" style="background:var(--c-job);"></div>
+                <div id="p_6" class="packet" style="background:var(--c-match);"></div>
+                <div id="p_7" class="packet" style="background:var(--c-search);"></div>
+
+            </div>
+            
+            <div id="console">
+                <div class="log-entry">SYSTEM_READY. TOGGLE SERVICES OFFLINE TO TEST RESILIENCE...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const consoleDiv = document.getElementById('console');
+        const inspectorDiv = document.getElementById('inspector-content');
+        const pMain = document.getElementById('p_main');
+        
+        // Define paths - Updated coordinates to match new wider layout
+        const row1Split = 280;
+        const row2Split = 480;
+        
+        // Node targets (approximate center top of nodes)
+        const services = [
+            { id: 'company', chk: 'chk_company', pkt: 'p_1', badge: 'badge_company', color: '#ff00ff', path: [{x:475, y:row1Split}, {x:115, y:row1Split}, {x:115, y:340}] },
+            { id: 'notification', chk: 'chk_notify', pkt: 'p_2', badge: 'badge_notification', color: '#ff5722', path: [{x:475, y:row1Split}, {x:345, y:row1Split}, {x:345, y:340}] },
+            { id: 'subscription', chk: 'chk_sub', pkt: 'p_3', badge: 'badge_subscription', color: '#9c27b0', path: [{x:475, y:row1Split}, {x:575, y:row1Split}, {x:575, y:340}] },
+            { id: 'payment', chk: 'chk_payment', pkt: 'p_4', badge: 'badge_payment', color: '#008000', path: [{x:475, y:row1Split}, {x:805, y:row1Split}, {x:805, y:340}] },
+            
+            { id: 'jobpost', chk: 'chk_job', pkt: 'p_5', badge: 'badge_jobpost', color: '#ff0000', path: [{x:475, y:row2Split}, {x:225, y:row2Split}, {x:225, y:520}] },
+            { id: 'matching', chk: 'chk_match', pkt: 'p_6', badge: 'badge_matching', color: '#00ffff', path: [{x:475, y:row2Split}, {x:455, y:row2Split}, {x:455, y:520}] },
+            { id: 'search', chk: 'chk_search', pkt: 'p_7', badge: 'badge_search', color: '#ffff00', path: [{x:475, y:row2Split}, {x:685, y:row2Split}, {x:685, y:520}] }
+        ];
+
+        function toggleOffline(id) {
+            const el = document.getElementById(id);
+            const chk = services.find(s => s.id === id).chk;
+            const isChecked = document.getElementById(chk).checked;
+            
+            if(isChecked) {
+                el.classList.add('offline-mode');
+                log(`CONFIG: ${id.toUpperCase()} SET TO OFFLINE MODE`, 'warn');
+            } else {
+                el.classList.remove('offline-mode');
+                log(`CONFIG: ${id.toUpperCase()} RESTORED ONLINE`);
+            }
+        }
+
+        function log(msg, type) {
+            const t = new Date().toLocaleTimeString('en-US', {hour12:false});
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            
+            let content = `<span style="color:#888">[${t}]</span> ${msg}`;
+            if(type === 'error') {
+                content = `<span style="color:#888">[${t}]</span> <span class="log-err">${msg}</span>`;
+            } else if (type === 'hl') {
+                content = `<span style="color:#888">[${t}]</span> <span class="log-hl">${msg}</span>`;
+            } else if (type === 'warn') {
+                content = `<span style="color:#888">[${t}]</span> <span class="log-warn">${msg}</span>`;
+            }
+            
+            div.innerHTML = content;
+            consoleDiv.appendChild(div);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function highlight(id, active, color, isError) {
+            const el = document.getElementById(id);
+            // Reset classes
+            el.classList.remove('active-node', 'error-node');
+            el.style.boxShadow = '';
+            
+            if(active) {
+                if(isError) {
+                    el.classList.add('error-node');
+                } else {
+                    el.classList.add('active-node');
+                    if(color) el.style.boxShadow = `6px 6px 0px ${color}`;
+                }
+            }
+        }
+
+        function showBadge(badgeId, show) {
+            const el = document.getElementById(badgeId);
+            if(el) el.style.display = show ? 'block' : 'none';
+        }
+
+        function showPayload(label, data) {
+            const div = document.createElement('div');
+            div.className = 'inspector-label';
+            div.innerText = `> ${label}`;
+            
+            const pre = document.createElement('div');
+            pre.className = 'json-block';
+            
+            // Syntax highlighting
+            const jsonStr = JSON.stringify(data, null, 2);
+            pre.innerHTML = jsonStr.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+
+            inspectorDiv.prepend(pre);
+            inspectorDiv.prepend(div);
+        }
+
+        function move(el, x, y, dur, easing = 'linear') {
+            el.style.display = 'block';
+            return new Promise(r => {
+                const timing = easing === 'smooth' ? 'cubic-bezier(0.4, 0.0, 0.2, 1)' : 'linear';
+                el.style.transition = `top ${dur}ms ${timing}, left ${dur}ms ${timing}`;
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
+                setTimeout(r, dur);
+            });
+        }
+
+        async function animatePath(el, waypoints, isDown) {
+            el.style.display = 'block';
+            el.style.backgroundColor = 'black'; 
+            el.style.left = '475px'; 
+            el.style.top = '200px';
+            
+            await move(el, waypoints[0].x, waypoints[0].y, 1000, 'smooth');
+            await move(el, waypoints[1].x, waypoints[1].y, 1500, 'linear');
+            await move(el, waypoints[2].x, waypoints[2].y, 1000, 'smooth');
+            
+            if(isDown) {
+                el.style.backgroundColor = 'red';
+                el.style.borderColor = 'red';
+            }
+        }
+
+        async function startSimulation() {
+            startBtn.disabled = true;
+            consoleDiv.innerHTML = '';
+            inspectorDiv.innerHTML = '';
+            
+            // Check Chaos State
+            const activeServices = services.map(s => {
+                const isDown = document.getElementById(s.chk).checked;
+                return { ...s, isDown };
+            });
+
+            // Reset UI
+            pMain.style.transition = 'none'; pMain.style.display = 'none';
+            services.forEach(s => {
+                const p = document.getElementById(s.pkt);
+                p.style.transition = 'none'; p.style.display = 'none';
+                p.style.backgroundColor = 'black';
+                p.style.borderColor = 'white';
+                highlight(s.id, false);
+                showBadge(s.badge, false);
+            });
+
+            log("INIT: CLIENT_REQUEST -> REGISTRATION_FLOW");
+            showPayload("CLIENT_REQUEST (POST /register)", {
+                "name": "Devision Corp",
+                "email": "hr@devision.io",
+                "plan": "ENTERPRISE",
+                "payment_method": "visacard_x99"
+            });
+            
+            // 1. Client -> Kong
+            pMain.style.left = '105px'; pMain.style.top = '65px';
+            await move(pMain, 280, 65, 1000, 'smooth');
+            highlight('kong', true, '#00d1b2');
+            log("NET: KONG_GATEWAY_RECEIVED");
+            await new Promise(r => setTimeout(r, 600));
+            highlight('kong', false);
+
+            // 2. Kong -> Auth
+            await move(pMain, 520, 65, 1000, 'smooth');
+            highlight('auth', true, '#0000ff');
+            log("AUTH: VALIDATING_CREDENTIALS...");
+            showPayload("AUTH_SERVICE: JWT GENERATED", {
+                "iss": "auth.devision",
+                "sub": "usr_882910",
+                "roles": ["admin", "recruiter"],
+                "exp": 1739900000
+            });
+            await new Promise(r => setTimeout(r, 1000));
+            highlight('auth', false);
+
+            // 3. Auth -> Kafka
+            log("AUTH: PUBLISHING_EVENT -> KAFKA");
+            await move(pMain, 585, 150, 800, 'linear'); 
+            await move(pMain, 475, 200, 800, 'linear'); 
+            pMain.style.display = 'none';
+            
+            const k = document.getElementById('kafka-cluster');
+            k.style.background = '#000'; k.style.color = '#fff';
+            log("KAFKA: EVENT_BROADCAST_TRIGGERED", 'hl');
+            showPayload("KAFKA_MESSAGE (Topic: user.created)", {
+                "event_id": "evt_99102",
+                "type": "USER_REGISTERED",
+                "timestamp": new Date().toISOString(),
+                "payload": { "user_id": "usr_882910", "plan": "ENTERPRISE" }
+            });
+            await new Promise(r => setTimeout(r, 1000));
+            k.style.background = '#f0f0f0'; k.style.color = '#000';
+
+            // 4. Fan Out (Path Following)
+            log("EVENT_BUS: DISPATCHING_TO_SUBSCRIBERS...");
+            
+            const animations = activeServices.map(s => {
+                const p = document.getElementById(s.pkt);
+                const delay = Math.random() * 800;
+                
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        animatePath(p, s.path, s.isDown).then(async () => {
+                            if(s.isDown) {
+                                // Detailed Error Simulation
+                                highlight(s.id, true, null, true); // Error highlight
+                                log(`[WARN] ${s.id.toUpperCase()}: Connection Latency Detected...`, 'warn');
+                                showPayload(`ERROR_LOG (${s.id})`, {
+                                    "error": "ConnectionTimeout",
+                                    "code": 503,
+                                    "message": "Service unreachable after 3000ms"
+                                });
+                                await new Promise(r => setTimeout(r, 800));
+                                log(`[ERR] ${s.id.toUpperCase()}: 503 SERVICE UNAVAILABLE`, 'error');
+                                showBadge(s.badge, true);
+                            } else {
+                                highlight(s.id, true, s.color, false); // Normal highlight
+                                log(`${s.id.toUpperCase()}: 200 OK - Processing Event`);
+                                // Fake DB Action
+                                const dbName = document.getElementById('db_' + s.id.replace('jobpost', 'job').replace('notification', 'notify').replace('payment', 'pay').replace('subscription', 'sub').replace('matching', 'match')).innerText;
+                                showPayload(`DB_COMMIT (${s.id})`, {
+                                    "storage": dbName,
+                                    "action": "INSERT",
+                                    "status": "COMMITTED"
+                                });
+                            }
+                            resolve();
+                        });
+                    }, delay);
+                });
+            });
+
+            await Promise.all(animations);
+            
+            log("SERVICES: REPORTING_STATUS...");
+            await new Promise(r => setTimeout(r, 2000));
+            
+            activeServices.forEach(s => {
+                if (!s.isDown) {
+                    highlight(s.id, false);
+                }
+                document.getElementById(s.pkt).style.display = 'none';
+            });
+
+            const anyFailures = activeServices.some(s => s.isDown);
+            if(anyFailures) {
+                log("FLOW_COMPLETE: SYSTEM PARTIALLY DEGRADED (CHECK LOGS)", 'error');
+            } else {
+                log("FLOW_COMPLETE: ALL SYSTEMS OPERATIONAL", 'hl');
+            }
+            
+            startBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>
