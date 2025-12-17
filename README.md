@@ -1,4 +1,4 @@
-# Job Manager DEVision**Job Manager DEVision** is an interactive dashboard and visualization tool designed to demonstrate the resilience and architecture of the "Job Manager" microservices ecosystem. It provides a real-time view of system components, traffic flow, and fault tolerance mechanisms.
+# Job Manager DEVision - Subsystem
 
 **Live Demo:** [https://f4p1e.github.io/JM_Service_Demo/](https://f4p1e.github.io/JM_Service_Demo/)
 
