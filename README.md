@@ -2,7 +2,8 @@
 
 **Live Demo:** [https://f4p1e.github.io/JM_Service_Demo/](https://f4p1e.github.io/JM_Service_Demo/)
 
-## AboutThis project serves as a "Deep Dive" visualizer for the Staging (v2.4) environment of the Job Manager subsystem. It maps out the flow of data from the client through the API gateway, authentication layers, event bus, and various backend microservices.
+## About
+This project serves as a "Deep Dive" visualizer for the Staging (v2.4) environment of the Job Manager subsystem. It maps out the flow of data from the client through the API gateway, authentication layers, event bus, and various backend microservices.
 
 Key capabilities include simulating traffic flow and a "Chaos Mode" to test how the system handles service failures.
 
